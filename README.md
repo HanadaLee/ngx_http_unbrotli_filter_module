@@ -42,8 +42,10 @@ To use theses modules, configure your nginx branch with `--add-module=/path/to/n
 
 ## unbrotli
 
-**Syntax:** *unbrotli on | off;*  
-**Default:** *unbrotli off;*  
+**Syntax:** *unbrotli on | off;*
+
+**Default:** *unbrotli off;*
+
 **Context:** *http, server, location*
 
 Enables or disables decompression of brotli compressed responses for clients that lack brotli support.
@@ -51,21 +53,25 @@ Enables or disables decompression of brotli compressed responses for clients tha
 ## unbrotli_force
 
 **Syntax:** *unbrotli_force on | off;*
+
 **Default:** *unbrotli_force off;*
+
 **Context:** *http, server, location*
 
 Enables or disables forced brotli decompression of upstream content.
 
 ## unbrotli_buffers
 
-**Syntax:** *unbrotli_buffers number size;*  
-**Default:** *unbrotli_buffers 32 4k | 16 8k;*  
+**Syntax:** *unbrotli_buffers number size;*
+
+**Default:** *unbrotli_buffers 32 4k | 16 8k;*
+
 **Context:** *http, server, location*
 
 Sets the number and size of buffers used to decompress a response. By default, the buffer size is equal to one memory page. This is either 4K or 8K, depending on a platform.
 
 # Author
 
-clyfish[https://github.com/clyfish]
+[clyfish](https://github.com/clyfish)
 
-This module is based on [ngx_http_gunzip_module](https://nginx.org/en/docs/http/ngx_http_gunzip_module.html), forked from [ngx_unbrotli](https://github.com/clyfish/ngx_unbrotli)
+This module is forked from [ngx_unbrotli](https://github.com/clyfish/ngx_unbrotli)
