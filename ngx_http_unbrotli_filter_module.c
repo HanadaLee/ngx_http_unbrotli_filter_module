@@ -301,65 +301,132 @@ failed:
 }
 
 
-static const char kEncoding[] = "br";
-static const size_t kEncodingLen = 2;
+static ngx_int_t
+ngx_http_unbrotli_check_accept_encoding(ngx_http_request_t* r) 
+{
+    ngx_table_elt_t *accept_encoding_entry;
+    ngx_str_t       *accept_encoding;
+    u_char          *cursor;
+    u_char          *end;
+    u_char           before;
+    u_char           after;
 
-static ngx_int_t check_accept_encoding(ngx_http_request_t* req) {
-  ngx_table_elt_t* accept_encoding_entry;
-  ngx_str_t* accept_encoding;
-  u_char* cursor;
-  u_char* end;
-  u_char before;
-  u_char after;
+    accept_encoding_entry = r->headers_in.accept_encoding;
+    if (accept_encoding_entry == NULL) {
+        return NGX_DECLINED;
+    }
 
-  accept_encoding_entry = req->headers_in.accept_encoding;
-  if (accept_encoding_entry == NULL) return NGX_DECLINED;
-  accept_encoding = &accept_encoding_entry->value;
+    accept_encoding = &accept_encoding_entry->value;
+    cursor = accept_encoding->data;
+    end = cursor + accept_encoding->len;
 
-  cursor = accept_encoding->data;
-  end = cursor + accept_encoding->len;
-  while (1) {
-    u_char digit;
-    /* It would be an idiotic idea to rely on compiler to produce performant
-       binary, that is why we just do -1 at every call site. */
-    cursor = ngx_strcasestrn(cursor, (char *)kEncoding, kEncodingLen - 1);
-    if (cursor == NULL) return NGX_DECLINED;
-    before = (cursor == accept_encoding->data) ? ' ' : cursor[-1];
-    cursor += kEncodingLen;
-    after = (cursor >= end) ? ' ' : *cursor;
-    if (before != ',' && before != ' ') continue;
-    if (after != ',' && after != ' ' && after != ';') continue;
+    static const char keyword_encoding[] = "br";
+    static const size_t keyword_encoding_len = 2;
 
-    /* Check for ";q=0[.[0[0[0]]]]" */
-    while (*cursor == ' ') cursor++;
-    if (*(cursor++) != ';') break;
-    while (*cursor == ' ') cursor++;
-    if (*(cursor++) != 'q') break;
-    while (*cursor == ' ') cursor++;
-    if (*(cursor++) != '=') break;
-    while (*cursor == ' ') cursor++;
-    if (*(cursor++) != '0') break;
-    if (*(cursor++) != '.') return NGX_DECLINED; /* ;q=0, */
-    digit = *(cursor++);
-    if (digit < '0' || digit > '9') return NGX_DECLINED; /* ;q=0., */
-    if (digit > '0') break;
-    digit = *(cursor++);
-    if (digit < '0' || digit > '9') return NGX_DECLINED; /* ;q=0.0, */
-    if (digit > '0') break;
-    digit = *(cursor++);
-    if (digit < '0' || digit > '9') return NGX_DECLINED; /* ;q=0.00, */
-    if (digit > '0') break;
-    return NGX_DECLINED; /* ;q=0.000 */
-  }
-  return NGX_OK;
+    while (1) {
+        u_char digit;
+        /* It would be an idiotic idea to rely on compiler to produce performant
+             binary, that is why we just do -1 at every call site. */
+        cursor = ngx_strcasestrn(cursor, (char *)keyword_encoding, keyword_encoding_len - 1);
+
+        if (cursor == NULL) {
+            return NGX_DECLINED;
+        }
+
+        before = (cursor == accept_encoding->data) ? ' ' : cursor[-1];
+        cursor += keyword_encoding_len;
+        after = (cursor >= end) ? ' ' : *cursor;
+
+        if (before != ',' && before != ' ') {
+            continue;
+        }
+
+        if (after != ',' && after != ' ' && after != ';') {
+            continue;
+        }
+
+        /* Check for ";q=0[.[0[0[0]]]]" */
+        while (*cursor == ' ') {
+            cursor++;
+        }
+
+        if (*(cursor++) != ';') {
+            break;
+        }
+
+        while (*cursor == ' ') {
+            cursor++;
+        }
+
+        if (*(cursor++) != 'q') {
+            break;
+        }
+
+        while (*cursor == ' ') {
+            cursor++;
+        }
+
+        if (*(cursor++) != '=') {
+            break;
+        }
+
+        while (*cursor == ' ') {
+            cursor++;
+        }
+
+        if (*(cursor++) != '0') {
+            break;
+        }
+
+        if (*(cursor++) != '.') { /* ;q=0, */
+            return NGX_DECLINED;
+        }
+
+        digit = *(cursor++);
+        if (digit < '0' || digit > '9') { /* ;q=0., */
+            return NGX_DECLINED;
+        }
+
+        if (digit > '0') {
+            break;
+        }
+
+        digit = *(cursor++);
+        if (digit < '0' || digit > '9') { /* ;q=0.0, */
+            return NGX_DECLINED;
+        }
+
+        if (digit > '0') {
+            break;
+        }
+
+        digit = *(cursor++);
+        if (digit < '0' || digit > '9') { /* ;q=0.00, */
+            return NGX_DECLINED;
+        }
+
+        if (digit > '0') {
+            break;
+        }
+
+        return NGX_DECLINED; /* ;q=0.000 */
+    }
+
+    return NGX_OK;
 }
 
 
 static ngx_int_t
-ngx_http_unbrotli_check_request(ngx_http_request_t* req) {
-  if (req != req->main) return NGX_DECLINED;
-  if (check_accept_encoding(req) != NGX_OK) return NGX_DECLINED;
-  return NGX_OK;
+ngx_http_unbrotli_check_request(ngx_http_request_t* r) {
+    if (r != r->main) {
+        return NGX_DECLINED;
+    }
+
+    if (ngx_http_unbrotli_check_accept_encoding(r) != NGX_OK) {
+        return NGX_DECLINED;
+    }
+
+    return NGX_OK;
 }
 
 
