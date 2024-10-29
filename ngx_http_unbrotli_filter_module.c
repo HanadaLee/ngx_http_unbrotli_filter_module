@@ -4,6 +4,7 @@
  * Copyright (C) Igor Sysoev
  * Copyright (C) Maxim Dounin
  * Copyright (C) Nginx, Inc.
+ * Copyright (C) Hanada
  */
 
 
@@ -19,6 +20,7 @@
 
 typedef struct {
     ngx_flag_t           enable;
+    ngx_flag_t           force;
     ngx_bufs_t           bufs;
 } ngx_http_unbrotli_conf_t;
 
@@ -79,6 +81,13 @@ static ngx_command_t  ngx_http_unbrotli_filter_commands[] = {
       offsetof(ngx_http_unbrotli_conf_t, enable),
       NULL },
 
+    { ngx_string("unbrotli_force"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_FLAG,
+      ngx_conf_set_flag_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_unbrotli_conf_t, force),
+      NULL },
+
     { ngx_string("unbrotli_buffers"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE2,
       ngx_conf_set_bufs_slot,
@@ -134,7 +143,6 @@ ngx_http_unbrotli_header_filter(ngx_http_request_t *r)
     conf = ngx_http_get_module_loc_conf(r, ngx_http_unbrotli_filter_module);
 
     /* TODO support multiple content-codings */
-    /* TODO always unbrotli - due to configuration or module request */
     /* TODO ignore content encoding? */
 
     if (!conf->enable
@@ -146,10 +154,13 @@ ngx_http_unbrotli_header_filter(ngx_http_request_t *r)
         return ngx_http_next_header_filter(r);
     }
 
-    r->gzip_vary = 1;
+    if (!conf->force) {
 
-    if (ngx_http_unbrotli_check_request(r) == NGX_OK) {
-        return ngx_http_next_header_filter(r);
+        r->gzip_vary = 1;
+
+        if (ngx_http_unbrotli_check_request(r) == NGX_OK) {
+            return ngx_http_next_header_filter(r);
+        }
     }
 
     ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_unbrotli_ctx_t));
@@ -764,6 +775,7 @@ ngx_http_unbrotli_create_conf(ngx_conf_t *cf)
      */
 
     conf->enable = NGX_CONF_UNSET;
+    conf->force  = NGX_CONF_UNSET;
 
     return conf;
 }
@@ -776,6 +788,7 @@ ngx_http_unbrotli_merge_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_http_unbrotli_conf_t *conf = child;
 
     ngx_conf_merge_value(conf->enable, prev->enable, 0);
+    ngx_conf_merge_value(conf->force, prev->force, 0);
 
     ngx_conf_merge_bufs_value(conf->bufs, prev->bufs,
                               (128 * 1024) / ngx_pagesize, ngx_pagesize);
