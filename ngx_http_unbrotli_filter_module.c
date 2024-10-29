@@ -302,7 +302,7 @@ failed:
 
 
 static ngx_int_t
-ngx_http_unbrotli_check_accept_encoding(ngx_http_request_t* r) 
+ngx_http_unbrotli_check_accept_encoding(ngx_http_request_t* r)
 {
     ngx_table_elt_t *accept_encoding_entry;
     ngx_str_t       *accept_encoding;
