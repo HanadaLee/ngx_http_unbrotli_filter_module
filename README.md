@@ -1,20 +1,71 @@
-The `ngx_unbrotli` module is a filter that decompresses responses with `Content-Encoding: br` for clients that do not support `brotli` encoding method.
+# Name
+ngx_http_unbrotli_filter_module is a filter that decompresses responses with “Content-Encoding: brotli” for clients that do not support “brotli” encoding method. The module will be useful when it is desirable to store data compressed to save space and reduce I/O costs.
 
-#### Build
+# Table of Content
 
-```bash
-./build_brotli.sh
-cd path/to/nginx-src
-./configure --add-dynamic-module=path/to/ngx_unbrotli
-make modules
-cp objs/ngx_http_unbrotli_filter_module.so path/to/nginx/modules
+* [Name](#name)
+* [Status](#status)
+* [Synopsis](#synopsis)
+* [Installation](#installation)
+* [Directives](#directives)
+  * [unbrotli](#unbrotli)
+  * [unbrotli_force](#unbrotli_force)
+  * [unbrotli_buffers](#unbrotli_buffers)
+* [Author](#author)
+* [License](#license)
+
+# Status
+
+This Nginx module is currently considered experimental.
+
+# Synopsis
+
+```nginx
+server {
+    listen 127.0.0.1:8080;
+    server_name localhost;
+
+    location / {
+        # enable brotli decompression for clients that do not support brotli compression
+        unbrotli on;
+
+        proxy_pass http://foo.com;
+    }
+}
 ```
 
-#### Usage
+# Installation
 
-`load_module modules/ngx_http_unbrotli_filter_module.so;`
+To use theses modules, configure your nginx branch with `--add-module=/path/to/ngx_http_unbrotli_filter_module`. Additionally, you need to pre-build the brotli decompression library.
 
-Usage is similar to [ngx_http_gunzip_module](http://nginx.org/en/docs/http/ngx_http_gunzip_module.html)
+# Directives
 
-- Replace `gunzip` with `unbrotli`
-- Replace `gunzip_buffers` with `unbrotli_buffers`
+## unbrotli
+
+**Syntax:** *unbrotli on | off;*  
+**Default:** *unbrotli off;*  
+**Context:** *http, server, location*
+
+Enables or disables decompression of brotli compressed responses for clients that lack brotli support.
+
+## unbrotli_force
+
+**Syntax:** *unbrotli_force on | off;*
+**Default:** *unbrotli_force off;*
+**Context:** *http, server, location*
+
+Enables or disables forced brotli decompression of upstream content.
+
+## unbrotli_buffers
+
+**Syntax:** *unbrotli_buffers number size;*  
+**Default:** *unbrotli_buffers 32 4k | 16 8k;*  
+**Context:** *http, server, location*
+
+Sets the number and size of buffers used to decompress a response. By default, the buffer size is equal to one memory page. This is either 4K or 8K, depending on a platform.
+
+# Author
+
+clyfish[https://github.com/clyfish]
+
+This module is based on [ngx_http_gunzip_module](https://nginx.org/en/docs/http/ngx_http_gunzip_module.html), forked from [ngx_unbrotli](https://github.com/clyfish/ngx_unbrotli)
