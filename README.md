@@ -52,13 +52,14 @@ Enables or disables decompression of brotli compressed responses for clients tha
 
 ## unbrotli_force
 
-**Syntax:** *unbrotli_force on | off;*
+**Syntax:** *unbrotli_force string ...;*
 
-**Default:** *unbrotli_force off;*
+**Default:** *-*
 
 **Context:** *http, server, location*
 
-Enables or disables forced brotli decompression of upstream content.
+Defines the conditions for forced brotli decompression. If at least one value in the string parameter is not empty and not equal to "0", forced brotli decompression is performed. But it will not try to decompress responses that do not contain the response header Content-Encoding: br
+
 
 ## unbrotli_buffers
 
