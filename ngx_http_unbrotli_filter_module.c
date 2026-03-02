@@ -13,9 +13,11 @@
 #include <ngx_http.h>
 
 #include <brotli/decode.h>
-#define IN_BUF_NO_FLUSH      0
-#define IN_BUF_SYNC_FLUSH    1
-#define IN_BUF_FINISH        2
+
+
+#define NGX_HTTP_UNBROTLI_IN_BUF_NO_FLUSH       0
+#define NGX_HTTP_UNBROTLI_IN_BUF_SYNC_FLUSH     1
+#define NGX_HTTP_UNBROTLI_IN_BUF_FINISH         2
 
 
 typedef struct {
@@ -51,7 +53,6 @@ typedef struct {
 } ngx_http_unbrotli_ctx_t;
 
 
-static ngx_int_t ngx_http_unbrotli_check_request(ngx_http_request_t *r);
 static ngx_int_t ngx_http_unbrotli_filter_inflate_start(ngx_http_request_t *r,
     ngx_http_unbrotli_ctx_t *ctx);
 static ngx_int_t ngx_http_unbrotli_filter_add_data(ngx_http_request_t *r,
@@ -62,6 +63,10 @@ static ngx_int_t ngx_http_unbrotli_filter_inflate(ngx_http_request_t *r,
     ngx_http_unbrotli_ctx_t *ctx);
 static ngx_int_t ngx_http_unbrotli_filter_inflate_end(ngx_http_request_t *r,
     ngx_http_unbrotli_ctx_t *ctx);
+
+static ngx_int_t ngx_http_brotli_ok(ngx_http_request_t *r);
+static ngx_int_t ngx_http_brotli_accept_encoding(ngx_str_t *ae);
+static ngx_uint_t ngx_http_brotli_quantity(u_char *p, u_char *last);
 
 static void *ngx_http_unbrotli_filter_alloc(void *opaque, size_t size);
 static void ngx_http_unbrotli_filter_free(void *opaque, void *address);
@@ -100,14 +105,14 @@ static ngx_command_t  ngx_http_unbrotli_filter_commands[] = {
 
 
 static ngx_http_module_t  ngx_http_unbrotli_filter_module_ctx = {
-    NULL,                                  /* preconfiguration */
+    NULL,                                    /* preconfiguration */
     ngx_http_unbrotli_filter_init,           /* postconfiguration */
 
-    NULL,                                  /* create main configuration */
-    NULL,                                  /* init main configuration */
+    NULL,                                    /* create main configuration */
+    NULL,                                    /* init main configuration */
 
-    NULL,                                  /* create server configuration */
-    NULL,                                  /* merge server configuration */
+    NULL,                                    /* create server configuration */
+    NULL,                                    /* merge server configuration */
 
     ngx_http_unbrotli_create_conf,           /* create location configuration */
     ngx_http_unbrotli_merge_conf             /* merge location configuration */
@@ -118,14 +123,14 @@ ngx_module_t  ngx_http_unbrotli_filter_module = {
     NGX_MODULE_V1,
     &ngx_http_unbrotli_filter_module_ctx,    /* module context */
     ngx_http_unbrotli_filter_commands,       /* module directives */
-    NGX_HTTP_MODULE,                       /* module type */
-    NULL,                                  /* init master */
-    NULL,                                  /* init module */
-    NULL,                                  /* init process */
-    NULL,                                  /* init thread */
-    NULL,                                  /* exit thread */
-    NULL,                                  /* exit process */
-    NULL,                                  /* exit master */
+    NGX_HTTP_MODULE,                         /* module type */
+    NULL,                                    /* init master */
+    NULL,                                    /* init module */
+    NULL,                                    /* init process */
+    NULL,                                    /* init thread */
+    NULL,                                    /* exit thread */
+    NULL,                                    /* exit process */
+    NULL,                                    /* exit master */
     NGX_MODULE_V1_PADDING
 };
 
@@ -162,7 +167,7 @@ ngx_http_unbrotli_header_filter(ngx_http_request_t *r)
     case NGX_OK:
         r->gzip_vary = 1;
 
-        if (ngx_http_unbrotli_check_request(r) == NGX_OK) {
+        if (ngx_http_brotli_ok(r) == NGX_OK) {
             return ngx_http_next_header_filter(r);
         }
         break;
@@ -196,9 +201,9 @@ ngx_http_unbrotli_header_filter(ngx_http_request_t *r)
 static ngx_int_t
 ngx_http_unbrotli_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
 {
-    int                     rc;
-    ngx_uint_t              flush;
-    ngx_chain_t            *cl;
+    int                       rc;
+    ngx_uint_t                flush;
+    ngx_chain_t              *cl;
     ngx_http_unbrotli_ctx_t  *ctx;
 
     ctx = ngx_http_get_module_ctx(r, ngx_http_unbrotli_filter_module);
@@ -321,131 +326,163 @@ failed:
 
 
 static ngx_int_t
-ngx_http_unbrotli_check_accept_encoding(ngx_http_request_t* r)
+ngx_http_brotli_ok(ngx_http_request_t* r)
 {
-    ngx_table_elt_t *accept_encoding_entry;
-    ngx_str_t       *accept_encoding;
-    u_char          *cursor;
-    u_char          *end;
-    u_char           before;
-    u_char           after;
+    ngx_table_elt_t *ae;
 
-    accept_encoding_entry = r->headers_in.accept_encoding;
-    if (accept_encoding_entry == NULL) {
+    if (r != r->main) {
         return NGX_DECLINED;
     }
 
-    accept_encoding = &accept_encoding_entry->value;
-    cursor = accept_encoding->data;
-    end = cursor + accept_encoding->len;
+    ae = r->headers_in.accept_encoding;
+    if (ae == NULL) {
+        return NGX_DECLINED;
+    }
 
-    static const char keyword_encoding[] = "br";
-    static const size_t keyword_encoding_len = 2;
+    if (ae->value.len < sizeof("br") - 1) {
+        return NGX_DECLINED;
+    }
 
-    while (1) {
-        u_char digit;
-        /* It would be an idiotic idea to rely on compiler to produce performant
-             binary, that is why we just do -1 at every call site. */
-        cursor = ngx_strcasestrn(cursor, (char *)keyword_encoding, keyword_encoding_len - 1);
+    if (ngx_memcmp(ae->value.data, "br", 2) != 0
+        && ngx_http_brotli_accept_encoding(&ae->value) != NGX_OK)
+    {
+        return NGX_DECLINED;
+    }
 
-        if (cursor == NULL) {
+    r->gzip_tested = 1;
+    r->gzip_ok = 0;
+
+    return NGX_OK;
+}
+
+
+/*
+ * a copy of ngx_http_gzip_accept_encoding, for brotli content encoding
+ */
+
+static ngx_int_t
+ngx_http_brotli_accept_encoding(ngx_str_t *ae)
+{
+    u_char  *p, *start, *last;
+
+    start = ae->data;
+    last = start + ae->len;
+
+    for ( ;; ) {
+        p = ngx_strcasestrn(start, "br", 2 - 1);
+        if (p == NULL) {
             return NGX_DECLINED;
         }
 
-        before = (cursor == accept_encoding->data) ? ' ' : cursor[-1];
-        cursor += keyword_encoding_len;
-        after = (cursor >= end) ? ' ' : *cursor;
+        if (p == start || (*(p - 1) == ',' || *(p - 1) == ' ')) {
+            break;
+        }
 
-        if (before != ',' && before != ' ') {
+        start = p + 2;
+    }
+
+    p += 2;
+
+    while (p < last) {
+        switch (*p++) {
+        case ',':
+            return NGX_OK;
+        case ';':
+            goto quantity;
+        case ' ':
             continue;
+        default:
+            return NGX_DECLINED;
         }
+    }
 
-        if (after != ',' && after != ' ' && after != ';') {
+    return NGX_OK;
+
+quantity:
+
+    while (p < last) {
+        switch (*p++) {
+        case 'q':
+        case 'Q':
+            goto equal;
+        case ' ':
             continue;
-        }
-
-        /* Check for ";q=0[.[0[0[0]]]]" */
-        while (*cursor == ' ') {
-            cursor++;
-        }
-
-        if (*(cursor++) != ';') {
-            break;
-        }
-
-        while (*cursor == ' ') {
-            cursor++;
-        }
-
-        if (*(cursor++) != 'q') {
-            break;
-        }
-
-        while (*cursor == ' ') {
-            cursor++;
-        }
-
-        if (*(cursor++) != '=') {
-            break;
-        }
-
-        while (*cursor == ' ') {
-            cursor++;
-        }
-
-        if (*(cursor++) != '0') {
-            break;
-        }
-
-        if (*(cursor++) != '.') { /* ;q=0, */
+        default:
             return NGX_DECLINED;
         }
+    }
 
-        digit = *(cursor++);
-        if (digit < '0' || digit > '9') { /* ;q=0., */
-            return NGX_DECLINED;
-        }
+    return NGX_OK;
 
-        if (digit > '0') {
-            break;
-        }
+equal:
 
-        digit = *(cursor++);
-        if (digit < '0' || digit > '9') { /* ;q=0.0, */
-            return NGX_DECLINED;
-        }
+    if (p + 2 > last || *p++ != '=') {
+        return NGX_DECLINED;
+    }
 
-        if (digit > '0') {
-            break;
-        }
-
-        digit = *(cursor++);
-        if (digit < '0' || digit > '9') { /* ;q=0.00, */
-            return NGX_DECLINED;
-        }
-
-        if (digit > '0') {
-            break;
-        }
-
-        return NGX_DECLINED; /* ;q=0.000 */
+    if (ngx_http_brotli_quantity(p, last) == 0) {
+        return NGX_DECLINED;
     }
 
     return NGX_OK;
 }
 
 
-static ngx_int_t
-ngx_http_unbrotli_check_request(ngx_http_request_t* r) {
-    if (r != r->main) {
-        return NGX_DECLINED;
+/*
+ * a copy of ngx_http_gzip_quantity
+ */
+
+static ngx_uint_t
+ngx_http_brotli_quantity(u_char *p, u_char *last)
+{
+    u_char      c;
+    ngx_uint_t  n, q;
+
+    c = *p++;
+
+    if (c != '0' && c != '1') {
+        return 0;
     }
 
-    if (ngx_http_unbrotli_check_accept_encoding(r) != NGX_OK) {
-        return NGX_DECLINED;
+    q = (c - '0') * 100;
+
+    if (p == last) {
+        return q;
     }
 
-    return NGX_OK;
+    c = *p++;
+
+    if (c == ',' || c == ' ') {
+        return q;
+    }
+
+    if (c != '.') {
+        return 0;
+    }
+
+    n = 0;
+
+    while (p < last) {
+        c = *p++;
+
+        if (c == ',' || c == ' ') {
+            break;
+        }
+
+        if (c >= '0' && c <= '9') {
+            q += c - '0';
+            n++;
+            continue;
+        }
+
+        return 0;
+    }
+
+    if (q > 100 || n > 3) {
+        return 0;
+    }
+
+    return q;
 }
 
 
@@ -456,8 +493,8 @@ ngx_http_unbrotli_filter_inflate_start(ngx_http_request_t *r,
     if ((ctx->brotli_decoder = BrotliDecoderCreateInstance(
         ngx_http_unbrotli_filter_alloc,
         ngx_http_unbrotli_filter_free,
-        ctx
-    )) == NULL) {
+        ctx)) == NULL)
+    {
         ngx_log_error(NGX_LOG_ALERT, r->connection->log, 0,
                       "BrotliDecoderCreateInstance failed");
         return NGX_ERROR;
@@ -466,7 +503,7 @@ ngx_http_unbrotli_filter_inflate_start(ngx_http_request_t *r,
     ctx->started = 1;
 
     ctx->last_out = &ctx->out;
-    ctx->flush = IN_BUF_NO_FLUSH;
+    ctx->flush = NGX_HTTP_UNBROTLI_IN_BUF_NO_FLUSH;
 
     return NGX_OK;
 }
@@ -476,7 +513,9 @@ static ngx_int_t
 ngx_http_unbrotli_filter_add_data(ngx_http_request_t *r,
     ngx_http_unbrotli_ctx_t *ctx)
 {
-    if (ctx->avail_in || ctx->flush != IN_BUF_NO_FLUSH || ctx->redo) {
+    if (ctx->avail_in || ctx->flush != NGX_HTTP_UNBROTLI_IN_BUF_NO_FLUSH
+        || ctx->redo)
+    {
         return NGX_OK;
     }
 
@@ -499,13 +538,13 @@ ngx_http_unbrotli_filter_add_data(ngx_http_request_t *r,
                    ctx->next_in, ctx->avail_in);
 
     if (ctx->in_buf->last_buf || ctx->in_buf->last_in_chain) {
-        ctx->flush = IN_BUF_FINISH;
+        ctx->flush = NGX_HTTP_UNBROTLI_IN_BUF_FINISH;
 
     } else if (ctx->in_buf->flush) {
-        ctx->flush = IN_BUF_SYNC_FLUSH;
+        ctx->flush = NGX_HTTP_UNBROTLI_IN_BUF_SYNC_FLUSH;
 
     } else if (ctx->avail_in == 0) {
-        /* ctx->flush == IN_BUF_NO_FLUSH */
+        /* ctx->flush == NGX_HTTP_UNBROTLI_IN_BUF_NO_FLUSH */
         return NGX_AGAIN;
     }
 
@@ -563,7 +602,8 @@ ngx_http_unbrotli_filter_inflate(ngx_http_request_t *r,
     ngx_chain_t  *cl;
 
     ngx_log_debug6(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "BrotliDecoderDecompressStream in: ni:%p no:%p ai:%ud ao:%ud fl:%d redo:%d",
+                   "BrotliDecoderDecompressStream in: "
+                   "ni:%p no:%p ai:%ud ao:%ud fl:%d redo:%d",
                    ctx->next_in, ctx->next_out,
                    ctx->avail_in, ctx->avail_out,
                    ctx->flush, ctx->redo);
@@ -571,7 +611,7 @@ ngx_http_unbrotli_filter_inflate(ngx_http_request_t *r,
     rc = BrotliDecoderDecompressStream(
         ctx->brotli_decoder,
         &ctx->avail_in,
-        (const uint8_t **)&ctx->next_in,
+        (const uint8_t **) &ctx->next_in,
         &ctx->avail_out,
         &ctx->next_out,
         NULL
@@ -579,13 +619,17 @@ ngx_http_unbrotli_filter_inflate(ngx_http_request_t *r,
 
     if (rc == BROTLI_DECODER_RESULT_ERROR) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                      "BrotliDecoderDecompressStream() failed: %d, %s", ctx->flush,
-                      BrotliDecoderErrorString(BrotliDecoderGetErrorCode(ctx->brotli_decoder)));
+                      "BrotliDecoderDecompressStream() failed: %d, %s",
+                      ctx->flush,
+                      BrotliDecoderErrorString(
+                          BrotliDecoderGetErrorCode(ctx->brotli_decoder)
+                      ));
         return NGX_ERROR;
     }
 
     ngx_log_debug5(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "BrotliDecoderDecompressStream out: ni:%p no:%p ai:%ud ao:%ud rc:%d",
+                   "BrotliDecoderDecompressStream out: "
+                   "ni:%p no:%p ai:%ud ao:%ud rc:%d",
                    ctx->next_in, ctx->next_out,
                    ctx->avail_in, ctx->avail_out,
                    rc);
@@ -625,9 +669,9 @@ ngx_http_unbrotli_filter_inflate(ngx_http_request_t *r,
 
     ctx->redo = 0;
 
-    if (ctx->flush == IN_BUF_SYNC_FLUSH) {
+    if (ctx->flush == NGX_HTTP_UNBROTLI_IN_BUF_SYNC_FLUSH) {
 
-        ctx->flush = IN_BUF_NO_FLUSH;
+        ctx->flush = NGX_HTTP_UNBROTLI_IN_BUF_NO_FLUSH;
 
         cl = ngx_alloc_chain_link(r->pool);
         if (cl == NULL) {
@@ -657,11 +701,12 @@ ngx_http_unbrotli_filter_inflate(ngx_http_request_t *r,
         return NGX_OK;
     }
 
-    if (ctx->flush == IN_BUF_FINISH && ctx->avail_in == 0) {
+    if (ctx->flush == NGX_HTTP_UNBROTLI_IN_BUF_FINISH && ctx->avail_in == 0) {
 
         if (rc != BROTLI_DECODER_RESULT_SUCCESS) {
             ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                          "BrotliDecoderDecompressStream() returned %d on response end", rc);
+                          "BrotliDecoderDecompressStream() returned %d "
+                          "on response end", rc);
             return NGX_ERROR;
         }
 
