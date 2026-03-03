@@ -326,7 +326,7 @@ failed:
 
 
 static ngx_int_t
-ngx_http_brotli_ok(ngx_http_request_t* r)
+ngx_http_brotli_ok(ngx_http_request_t *r)
 {
     ngx_table_elt_t *ae;
 
