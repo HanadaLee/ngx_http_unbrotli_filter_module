@@ -3,16 +3,16 @@ ngx_http_unbrotli_filter_module is a filter that decompresses responses with “
 
 # Table of Content
 
-* [Name](#name)
-* [Status](#status)
-* [Synopsis](#synopsis)
-* [Installation](#installation)
-* [Directives](#directives)
-  * [unbrotli](#unbrotli)
-  * [unbrotli_force](#unbrotli_force)
-  * [unbrotli_buffers](#unbrotli_buffers)
-* [Author](#author)
-* [License](#license)
+- [Name](#name)
+- [Table of Content](#table-of-content)
+- [Status](#status)
+- [Synopsis](#synopsis)
+- [Installation](#installation)
+- [Directives](#directives)
+  - [unbrotli](#unbrotli)
+  - [unbrotli\_force](#unbrotli_force)
+  - [unbrotli\_buffers](#unbrotli_buffers)
+- [Author](#author)
 
 # Status
 
@@ -46,7 +46,7 @@ To use theses modules, configure your nginx branch with `--add-module=/path/to/n
 
 **Default:** *unbrotli off;*
 
-**Context:** *http, server, location*
+**Context:** *http, server, location, when*
 
 Enables or disables decompression of brotli compressed responses for clients that lack brotli support.
 When built with `ngx_condition_module`, this directive can also be configured
@@ -58,7 +58,7 @@ inside a `when` block.
 
 **Default:** *unbrotli_force off;*
 
-**Context:** *http, server, location*
+**Context:** *http, server, location, when*
 
 When enabled, decompresses brotli responses without checking whether the
 client accepts brotli. Responses without `Content-Encoding: br` are not
