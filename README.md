@@ -49,17 +49,21 @@ To use theses modules, configure your nginx branch with `--add-module=/path/to/n
 **Context:** *http, server, location*
 
 Enables or disables decompression of brotli compressed responses for clients that lack brotli support.
+When built with `ngx_condition_module`, this directive can also be configured
+inside a `when` block.
 
 ## unbrotli_force
 
-**Syntax:** *unbrotli_force string ...;*
+**Syntax:** *unbrotli_force on | off;*
 
-**Default:** *-*
+**Default:** *unbrotli_force off;*
 
 **Context:** *http, server, location*
 
-Defines the conditions for forced brotli decompression. If at least one value in the string parameter is not empty and not equal to "0", forced brotli decompression is performed. But it will not try to decompress responses that do not contain the response header Content-Encoding: br
-
+When enabled, decompresses brotli responses without checking whether the
+client accepts brotli. Responses without `Content-Encoding: br` are not
+affected. When built with `ngx_condition_module`, this directive can also be
+configured inside a `when` block.
 
 ## unbrotli_buffers
 
