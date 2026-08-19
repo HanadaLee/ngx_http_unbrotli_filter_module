@@ -36,7 +36,7 @@ server {
 
 # Installation
 
-To use theses modules, configure your nginx branch with `--add-module=/path/to/ngx_http_unbrotli_filter_module`. Additionally, you need to pre-build the brotli decompression library.
+To use theses modules, configure your nginx branch with `--add-module=/path/to/ngx_http_unbrotli_filter_module`. Additionally, you need to pre-build the brotli decompression library. Set `BROTLI_DIR` to its installation prefix; the default is `/usr/local/brotli`.
 
 # Directives
 

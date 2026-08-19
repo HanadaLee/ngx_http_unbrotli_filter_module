@@ -1,14 +1,13 @@
-BROTLI_DIR=/usr/local/brotli
+BROTLI_DIR=${BROTLI_DIR:-/usr/local/brotli}
+ngx_addon_name=ngx_http_unbrotli_filter_module
 ngx_module_type=HTTP_FILTER
 ngx_module_name=ngx_http_unbrotli_filter_module
 ngx_module_incs="$BROTLI_DIR/include"
 ngx_module_srcs="$ngx_addon_dir/ngx_http_unbrotli_filter_module.c"
 ngx_module_libs="-L$BROTLI_DIR/lib -lbrotlidec -lbrotlicommon -lm"
+ngx_module_order="$ngx_module_name ngx_http_gunzip_filter_module"
 
 . auto/module
-
-ngx_addon_name=$ngx_module_name
-ngx_module_order="$ngx_module_name ngx_http_gunzip_filter_module"
 
 if [ "$ngx_module_link" != DYNAMIC ]; then
     # ngx_module_order doesn't work with static modules,
