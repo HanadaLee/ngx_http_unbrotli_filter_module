@@ -14,8 +14,8 @@
 
 #include <brotli/decode.h>
 
-#if (NGX_CONDITION)
-#include <ngx_http_condition_module.h>
+#if (NGX_EXPR)
+#include <ngx_http_expr_module.h>
 #endif
 
 
@@ -25,7 +25,7 @@
 
 
 typedef struct {
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
     ngx_array_t         *enable;
     ngx_array_t         *force;
 #else
@@ -91,12 +91,12 @@ static ngx_command_t  ngx_http_unbrotli_filter_commands[] = {
 
     { ngx_string("unbrotli"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
                         |NGX_HTTP_MAIN_WHEN_CONF|NGX_HTTP_SRV_WHEN_CONF
                         |NGX_HTTP_LOC_WHEN_CONF
 #endif
                         |NGX_CONF_FLAG,
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
       ngx_conf_set_conditional_flag_slot,
 #else
       ngx_conf_set_flag_slot,
@@ -107,12 +107,12 @@ static ngx_command_t  ngx_http_unbrotli_filter_commands[] = {
 
     { ngx_string("unbrotli_force"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
                         |NGX_HTTP_MAIN_WHEN_CONF|NGX_HTTP_SRV_WHEN_CONF
                         |NGX_HTTP_LOC_WHEN_CONF
 #endif
                         |NGX_CONF_FLAG,
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
       ngx_conf_set_conditional_flag_slot,
 #else
       ngx_conf_set_flag_slot,
@@ -178,8 +178,8 @@ ngx_http_unbrotli_header_filter(ngx_http_request_t *r)
     /* TODO support multiple content-codings */
     /* TODO ignore content encoding? */
 
-#if (NGX_CONDITION)
-    if (!ngx_http_get_conditional_flag_value(r, conf->enable)
+#if (NGX_EXPR)
+    if (!ngx_http_get_expr_flag_value(r, conf->enable)
 #else
     if (!conf->enable
 #endif
@@ -191,8 +191,8 @@ ngx_http_unbrotli_header_filter(ngx_http_request_t *r)
         return ngx_http_next_header_filter(r);
     }
 
-#if (NGX_CONDITION)
-    if (!ngx_http_get_conditional_flag_value(r, conf->force)) {
+#if (NGX_EXPR)
+    if (!ngx_http_get_expr_flag_value(r, conf->force)) {
 #else
     if (!conf->force) {
 #endif
@@ -880,7 +880,7 @@ ngx_http_unbrotli_create_conf(ngx_conf_t *cf)
      *     conf->bufs.num = 0;
      */
 
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
     conf->enable = NGX_CONF_UNSET_PTR;
     conf->force = NGX_CONF_UNSET_PTR;
 #else
@@ -898,15 +898,15 @@ ngx_http_unbrotli_merge_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_http_unbrotli_conf_t *prev = parent;
     ngx_http_unbrotli_conf_t *conf = child;
 
-#if (NGX_CONDITION)
-    if (ngx_conf_merge_conditional_flag_value(cf, &conf->enable,
-            prev->enable, 0) != NGX_OK)
+#if (NGX_EXPR)
+    if (ngx_conf_merge_expr_flag_value(cf, &conf->enable,
+                                       prev->enable, 0) != NGX_OK)
     {
         return NGX_CONF_ERROR;
     }
 
-    if (ngx_conf_merge_conditional_flag_value(cf, &conf->force,
-            prev->force, 0) != NGX_OK)
+    if (ngx_conf_merge_expr_flag_value(cf, &conf->force,
+                                       prev->force, 0) != NGX_OK)
     {
         return NGX_CONF_ERROR;
     }
